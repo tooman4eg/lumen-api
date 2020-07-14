@@ -4,6 +4,10 @@
 namespace App\Http\Controllers;
 
 use  App\Email;
+use function Couchbase\defaultDecoder;
+use Illuminate\Http\Request;
+
+
 class EmailController extends Controller
 {
     const  CODE_MAX_CHEKING_ATTEMPTS = 3;
@@ -21,7 +25,8 @@ class EmailController extends Controller
     {
         //
     }
-   /**
+
+    /**
      * @return mixed
      */
     public function allCodes()
@@ -35,9 +40,55 @@ class EmailController extends Controller
      * @param $email
      * @return mixed
      */
-    public function sendCode()
+    public function sendCode(Request $request)
     {
-      dd('test');
+        //validation
+        $this->validate($request, [
+            'email' => 'required|email'
+        ]);
+        $email = $request->email;
+//        if (filter_var($request->email, FILTER_VALIDATE_EMAIL) === false) {
+//            return response()->json('Error: wrong email', 401);
+//        }
+        //проверем можно ли еще генерить код
+        //check max generated  code per hour
+        $sentPerHour = $this->countPer($email, 60);
+//        where('is_valid', '<>', Email::INVALID_CODE)
+//            ->where('email', stripslashes())
+//            ->where('created_at', '>', date("Y-m-d H:i:s", time() - 1 * 60 * 60))
+//            ->count();
+
+        $sentPerMinutes = $this->countPer($email, self::CODE_GENERATION_TIMEOUT);
+//        $sentPerMinutes = Email::where('is_valid', '<>', Email::INVALID_CODE)
+//            ->where('email', stripslashes($request->email))
+//            ->where('created_at', '>', date("Y-m-d H:i:s", time() - 5 * 60))
+//            ->count();
+
+        if ($sentPerHour >= self::CODE_MAX_GENERATION_PER_HOUR || $sentPerMinutes >= self::CODE_MAX_GENERATION_PER_MINUTES) {
+            return response()->json('Error: Too many attempts. You have to waite.', 401);
+        } else {
+
+
+            $code = $this->makeCode();
+
+            if (mail($email, "Please confirm y our  email", 'Your code :' . $code)) {
+
+                Email::invalidateEmail($email);
+                //add  new
+                Email::insert([
+                    'email' => $email,
+                    'code' => $code,
+                    'is_valid' => Email::VALID_CODE,
+                    'created_at' => date("Y-m-d H:i:s", time()),
+                    'updated_at' => date("Y-m-d H:i:s", time()),
+                    'attempts' => 0,
+                ]);
+                return response()->json('Code sent on your email', 200);
+            }
+        }
+
+        return response()->json('Can not send the code. Please try again later', 401);
+
     }
 
 
@@ -61,5 +112,11 @@ class EmailController extends Controller
         return $code;
     }
 
-
+    private function countPer($email, $minutes)
+    {
+        return Email::where('is_valid', '<>', Email::EXPIRED_CODE)
+            ->where('email', stripslashes($email))
+            ->where('created_at', '>', date("Y-m-d H:i:s", time() - $minutes * 60))
+            ->count();
+    }
 }
