@@ -28,8 +28,18 @@ class Email extends Model
      */
     protected $table = 'Email';
 
-   
+    /**
+     * Делаем все записи  по емейлу не валидными и не участвующими  поиске
+     *
+     * @param $email
+     * @return mixed
+     *
+     */
+    public static function invalidateEmail($email)
+    {
+        Email::where('email', stripslashes($email))->where('is_valid', '<>', Email::EXPIRED_CODE)->update(['is_valid' => self::NOT_COFIRMED_CODE]);
 
+    }
 
 
 }

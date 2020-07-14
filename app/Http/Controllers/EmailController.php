@@ -37,7 +37,7 @@ class EmailController extends Controller
 
 
     /**
-     * @param $email
+     * @param $request
      * @return mixed
      */
     public function sendCode(Request $request)
@@ -95,7 +95,49 @@ class EmailController extends Controller
 
     public function checkCode(Request $request)
     {
-       dd('test');
+        //validation
+        $this->validate($request, [
+            'email' => 'required|email',
+            'code' => 'required',
+
+        ]);
+        // 1) Код - это строка из 4-ех символов, каждый из которых является цифрой;
+        if (!preg_match('@^\d{4}@', $request->code)) {
+            return response()->json('Wrong code. Please check it.', 401);
+        }
+
+
+        /**
+         * Общие требования к секретному коду:
+         * 6) После трех неуспешных попыток проверить код (вызов checkCode) код инвалидируется;
+         * 7) После успешной проверки кода он инвалидируется;
+         */
+
+        $chekedEmail = Email::where('email', $request->email)
+            ->where('is_valid', Email::VALID_CODE)
+            ->where('created_at', '>', date("Y-m-d H:i:s", time() - self::CODE_EXPIRED_TIMEOUT * 60))
+            ->first();
+//        dd($chekedEmail->code);
+        if ($chekedEmail) {
+            Email::where('id', $chekedEmail->id)->increment('attempts');
+            if ($chekedEmail->code == $request->code) {
+//                Email::where('email', stripslashes($this->email))->update(['is_valid' => Email::NOT_COFIRMED_CODE]);
+                /* 8) После успешной проверки кода все счетчики ограничений по отправке кода для данного email обнуляются.*/
+                Email::where('email', stripslashes($request->email))->update(['attempts' => 0, 'is_valid' => Email::EXPIRED_CODE]);
+//                Email::where('id', $chekedEmail['id'])->update(['attempts' => 0, 'is_valid' => Email::EXPIRED_CODE]);
+
+                return response()->json('Your email successfully confirmed', 200);
+            } else {
+                if ($chekedEmail->attempts >= self::CODE_MAX_CHEKING_ATTEMPTS) {
+                    Email::where('id', $chekedEmail->id)
+                        ->update(['is_valid' => Email::NOT_COFIRMED_CODE]);
+                }
+                return response()->json('Your code is wrong', 201);
+            }
+        } else {
+            return response()->json('Error: wrong email', 401);
+        }
+
 
     }
 
