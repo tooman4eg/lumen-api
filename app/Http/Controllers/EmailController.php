@@ -8,12 +8,31 @@ use function Couchbase\defaultDecoder;
 use Illuminate\Http\Request;
 
 
+/**
+ * Class EmailController
+ * @package App\Http\Controllers
+ */
 class EmailController extends Controller
 {
+    /**
+     * Количетсво попыток до сброса кода
+     */
     const  CODE_MAX_CHEKING_ATTEMPTS = 3;
+    /**
+     *Максимальное количество генераций кода в течение часа
+     */
     const  CODE_MAX_GENERATION_PER_HOUR = 5;
+    /**
+     *Максимальное количество генераций кода в течение минуты
+     */
     const  CODE_MAX_GENERATION_PER_MINUTES = 1;
+    /**
+     *Задержка в минутах для генерации  следующего кода
+     */
     const  CODE_GENERATION_TIMEOUT = 5;
+    /**
+     *Время жизни кода
+     */
     const  CODE_EXPIRED_TIMEOUT = 5;
 
     /**
@@ -37,7 +56,7 @@ class EmailController extends Controller
 
 
     /**
-     * @param $request
+     * @param Request $request
      * @return mixed
      */
     public function sendCode(Request $request)
@@ -47,22 +66,8 @@ class EmailController extends Controller
             'email' => 'required|email'
         ]);
         $email = $request->email;
-//        if (filter_var($request->email, FILTER_VALIDATE_EMAIL) === false) {
-//            return response()->json('Error: wrong email', 401);
-//        }
-        //проверем можно ли еще генерить код
-        //check max generated  code per hour
         $sentPerHour = $this->countPer($email, 60);
-//        where('is_valid', '<>', Email::INVALID_CODE)
-//            ->where('email', stripslashes())
-//            ->where('created_at', '>', date("Y-m-d H:i:s", time() - 1 * 60 * 60))
-//            ->count();
-
         $sentPerMinutes = $this->countPer($email, self::CODE_GENERATION_TIMEOUT);
-//        $sentPerMinutes = Email::where('is_valid', '<>', Email::INVALID_CODE)
-//            ->where('email', stripslashes($request->email))
-//            ->where('created_at', '>', date("Y-m-d H:i:s", time() - 5 * 60))
-//            ->count();
 
         if ($sentPerHour >= self::CODE_MAX_GENERATION_PER_HOUR || $sentPerMinutes >= self::CODE_MAX_GENERATION_PER_MINUTES) {
             return response()->json('Error: Too many attempts. You have to waite.', 401);
@@ -92,7 +97,10 @@ class EmailController extends Controller
     }
 
 
-
+    /**
+     * @param Request $request
+     * @return mixed
+     */
     public function checkCode(Request $request)
     {
         //validation
@@ -101,7 +109,7 @@ class EmailController extends Controller
             'code' => 'required',
 
         ]);
-        // 1) Код - это строка из 4-ех символов, каждый из которых является цифрой;
+
         if (!preg_match('@^\d{4}@', $request->code)) {
             return response()->json('Wrong code. Please check it.', 401);
         }
@@ -117,15 +125,11 @@ class EmailController extends Controller
             ->where('is_valid', Email::VALID_CODE)
             ->where('created_at', '>', date("Y-m-d H:i:s", time() - self::CODE_EXPIRED_TIMEOUT * 60))
             ->first();
-//        dd($chekedEmail->code);
+
         if ($chekedEmail) {
             Email::where('id', $chekedEmail->id)->increment('attempts');
             if ($chekedEmail->code == $request->code) {
-//                Email::where('email', stripslashes($this->email))->update(['is_valid' => Email::NOT_COFIRMED_CODE]);
-                /* 8) После успешной проверки кода все счетчики ограничений по отправке кода для данного email обнуляются.*/
                 Email::where('email', stripslashes($request->email))->update(['attempts' => 0, 'is_valid' => Email::EXPIRED_CODE]);
-//                Email::where('id', $chekedEmail['id'])->update(['attempts' => 0, 'is_valid' => Email::EXPIRED_CODE]);
-
                 return response()->json('Your email successfully confirmed', 200);
             } else {
                 if ($chekedEmail->attempts >= self::CODE_MAX_CHEKING_ATTEMPTS) {
@@ -141,9 +145,11 @@ class EmailController extends Controller
 
     }
 
+
     /**
      * генерим код
-     *     //        * 1) Код - это строка из 4-ех символов, каждый из которых является цифрой;
+     * Код - это строка из 4-ех символов, каждый из которых является цифрой;
+     * @return string
      */
     private function makeCode()
     {
@@ -154,6 +160,11 @@ class EmailController extends Controller
         return $code;
     }
 
+    /**
+     * @param $email
+     * @param $minutes
+     * @return mixed
+     */
     private function countPer($email, $minutes)
     {
         return Email::where('is_valid', '<>', Email::EXPIRED_CODE)
