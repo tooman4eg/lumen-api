@@ -10,6 +10,9 @@ use Illuminate\Database\Eloquent\Model;
  */
 class Email extends Model
 {
+    const NOT_COFIRMED_CODE = 0;
+    const VALID_CODE = 1;
+    const EXPIRED_CODE = 2;
 
     /**
      * The attributes that are mass assignable.

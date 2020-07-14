@@ -17,6 +17,8 @@ $router->get('/', function () use ($router) {
 
 $router->group(['prefix' => 'api'], function ($router) {
     $router->get('getCode', 'EmailController@allCodes');
+    $router->post('sendCode', 'EmailController@sendCode');
+    $router->post('checkCode', 'EmailController@checkCode');
 
 
 });
